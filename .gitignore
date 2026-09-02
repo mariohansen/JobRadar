@@ -1,0 +1,45 @@
+# Secrets und lokale Konfiguration
+.env
+*.pem
+*.ppk
+
+# Terraform: lokaler State und Provider-Cache.
+# .terraform.lock.hcl wird bewusst NICHT ignoriert - die Lockfile
+# gehoert ins Repo, damit alle mit denselben Provider-Versionen bauen.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+tfplan
+*.tfplan
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Java / Maven
+target/
+*.class
+
+# Lambda-Deployment-Pakete
+*.zip
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+services/poller/build/
+services/poller/poller.zip

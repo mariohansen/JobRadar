@@ -1,0 +1,4 @@
+confluent-kafka>=2.6,<3
+# In der Lambda-Laufzeit bereits vorhanden, lokal aber noetig, um das
+# Kafka-Passwort aus dem Parameter Store zu lesen.
+boto3>=1.35

@@ -1,0 +1,2 @@
+confluent-kafka>=2.6,<3
+boto3>=1.35

@@ -1,0 +1,213 @@
+#!/bin/bash
+# Laeuft einmalig beim ersten Boot der Instanz, als root.
+# set -x protokolliert jeden Schritt nach /var/log/cloud-init-output.log.
+set -euxo pipefail
+
+# --- Swap ---
+# t3.micro hat 1 GiB RAM. Ohne Swap beendet der OOM-Killer die Kafka-JVM
+# bei der ersten Lastspitze. 2 GiB Auslagerungsdatei auf dem Root-Volume.
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+# Swap ist Notreserve, kein RAM-Ersatz: Auslagern auf EBS ist langsam.
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-kafka.conf
+sysctl --load=/etc/sysctl.d/99-kafka.conf
+
+# --- Docker ---
+dnf update -y
+dnf install -y docker
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+# Compose-Plugin liegt in Amazon Linux 2023 nicht als Paket vor.
+COMPOSE_VERSION=v5.5.0
+mkdir -p /usr/libexec/docker/cli-plugins
+curl -sSL "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64" \
+  -o /usr/libexec/docker/cli-plugins/docker-compose
+chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+
+install -d -m 0755 /opt/kafka
+# Nur root darf an die Schluessel.
+install -d -m 0700 /opt/kafka/secrets
+
+# --- Compose-Definition ---
+# Die advertised-Adresse kommt aus der .env, die bootstrap.sh bei jedem
+# Boot neu schreibt - deshalb hier als Variable, nicht fest verdrahtet.
+cat > /opt/kafka/docker-compose.yml <<'COMPOSE'
+services:
+  kafka:
+    image: apache/kafka:${kafka_version}
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      # Nur der externe Listener wird nach aussen gereicht. Der interne
+      # PLAINTEXT-Listener bleibt im Container und ist von aussen nicht
+      # erreichbar - ueber ihn legen wir gleich den SCRAM-Benutzer an.
+      - "9094:9094"
+    volumes:
+      - /opt/kafka/secrets:/etc/kafka/secrets:ro
+      - kafka-data:/var/lib/kafka/data
+    environment:
+      # --- KRaft: Broker und Controller in einem Prozess ---
+      # Seit Kafka 4.0 gibt es kein ZooKeeper mehr. Das spart auf 1 GiB
+      # RAM einen kompletten zweiten JVM-Prozess.
+      CLUSTER_ID: "$${KAFKA_CLUSTER_ID}"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+
+      # --- Listener ---
+      # INTERNAL  9092 PLAINTEXT, nur im Container - Verwaltungszugriff
+      # CONTROLLER 9093 PLAINTEXT, nur im Container - KRaft-Quorum
+      # EXTERNAL  9094 SASL_SSL, oeffentlich - hier kommt die Lambda an
+      KAFKA_LISTENERS: "INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://localhost:9092,EXTERNAL://$${KAFKA_ADVERTISED_HOST}:9094"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:SASL_SSL"
+
+      # --- SASL ---
+      # SCRAM statt PLAIN: der Broker speichert nur einen abgeleiteten
+      # Wert, das Passwort geht nie ueber die Leitung.
+      KAFKA_SASL_ENABLED_MECHANISMS: "SCRAM-SHA-512"
+
+      # --- TLS ---
+      # PEM statt Java-Keystore: erspart das Umpacken in JKS-Dateien.
+      # broker.pem enthaelt privaten Schluessel und Zertifikat.
+      KAFKA_SSL_KEYSTORE_TYPE: "PEM"
+      KAFKA_SSL_KEYSTORE_LOCATION: "/etc/kafka/secrets/broker.pem"
+      KAFKA_SSL_TRUSTSTORE_TYPE: "PEM"
+      KAFKA_SSL_TRUSTSTORE_LOCATION: "/etc/kafka/secrets/ca.crt"
+      # Clients weisen sich per SASL aus, nicht per Zertifikat.
+      KAFKA_SSL_CLIENT_AUTH: "none"
+
+      # --- Single-Node-Realitaet ---
+      # Ein Broker kann nichts replizieren. Ohne diese Werte bleibt der
+      # Cluster beim Anlegen interner Topics haengen.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+
+      # Kafka verlangt fuer jeden SASL-Listener einen JAAS-Eintrag, auch
+      # bei SCRAM. Ohne ihn bricht der Start ab mit "Could not find a
+      # KafkaServer entry in the JAAS configuration".
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_server_jaas.conf"
+
+      # Heap eng halten: 1 GiB RAM insgesamt, davon braucht auch das
+      # Betriebssystem etwas.
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms256M"
+
+volumes:
+  kafka-data:
+COMPOSE
+
+# --- Bootstrap bei jedem Boot ---
+cat > /opt/kafka/bootstrap.sh <<'BOOTSTRAP'
+#!/bin/bash
+set -euo pipefail
+
+REGION="${aws_region}"
+SSM_PREFIX="${ssm_prefix}"
+KAFKA_USER="${kafka_user}"
+CLUSTER_ID="${cluster_id}"
+
+# IMDSv2 verlangt erst ein Token, dann die Abfrage. Der oeffentliche
+# Hostname aendert sich bei jedem Stop/Start - deshalb holen wir ihn bei
+# jedem Boot neu, statt ihn einmalig zu verdrahten.
+TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+PUBLIC_HOST=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  "http://169.254.169.254/latest/meta-data/public-hostname")
+
+# Zertifikate und Passwort aus SSM holen. Die Instanz weist sich dabei
+# ueber ihre IAM-Rolle aus - es liegt kein Access Key auf der Platte.
+fetch() {
+  aws ssm get-parameter --region "$REGION" --name "$1" \
+    --with-decryption --query 'Parameter.Value' --output text
+}
+
+umask 077
+fetch "$SSM_PREFIX/broker-private-key" > /opt/kafka/secrets/broker.pem
+# Kafka erwartet im PEM-Keystore Schluessel und Zertifikat in einer Datei.
+fetch "$SSM_PREFIX/broker-certificate" >> /opt/kafka/secrets/broker.pem
+fetch "$SSM_PREFIX/ca-certificate"     > /opt/kafka/secrets/ca.crt
+KAFKA_PASSWORD=$(fetch "$SSM_PREFIX/user-password")
+
+# JAAS-Eintrag. Enthaelt bewusst keine Benutzerdaten - bei SCRAM stehen
+# die im KRaft-Metadatenlog, hier muss nur das Login-Modul deklariert
+# sein.
+cat > /opt/kafka/secrets/kafka_server_jaas.conf <<'JAAS'
+KafkaServer {
+  org.apache.kafka.common.security.scram.ScramLoginModule required;
+};
+JAAS
+
+# Der Broker laeuft im Container als appuser (1000:1000), nicht als root.
+# Ohne Besitzerwechsel kommt er an seine eigenen Zertifikate nicht heran.
+# Die Rechte bleiben eng, es wechselt nur der Eigentuemer.
+chown -R 1000:1000 /opt/kafka/secrets
+chmod 0700 /opt/kafka/secrets
+chmod 0600 /opt/kafka/secrets/*
+
+# .env fuer docker compose: hier landet die aktuelle Adresse.
+cat > /opt/kafka/.env <<ENV
+KAFKA_ADVERTISED_HOST=$PUBLIC_HOST
+KAFKA_CLUSTER_ID=$CLUSTER_ID
+ENV
+chmod 600 /opt/kafka/.env
+
+cd /opt/kafka
+docker compose up -d
+
+# Auf den internen Listener warten, bevor der Benutzer angelegt wird.
+for i in $(seq 1 30); do
+  if docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh \
+       --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+    break
+  fi
+  sleep 5
+done
+
+# SCRAM-Benutzer anlegen. Laeuft ueber den internen PLAINTEXT-Listener,
+# der nur im Container erreichbar ist - sonst haetten wir ein
+# Henne-Ei-Problem: ohne Benutzer keine Anmeldung, ohne Anmeldung kein
+# Benutzer. Der Aufruf ist idempotent, er ueberschreibt bei jedem Boot
+# denselben Wert.
+docker exec kafka /opt/kafka/bin/kafka-configs.sh \
+  --bootstrap-server localhost:9092 \
+  --alter \
+  --add-config "SCRAM-SHA-512=[password=$KAFKA_PASSWORD]" \
+  --entity-type users \
+  --entity-name "$KAFKA_USER"
+BOOTSTRAP
+chmod 700 /opt/kafka/bootstrap.sh
+
+# --- systemd-Einheit ---
+# Sorgt dafuer, dass Kafka nach jedem Stop/Start wieder hochkommt und die
+# Konfiguration dabei mit der neuen Adresse neu gerendert wird. user_data
+# selbst laeuft nur beim allerersten Boot und taugt dafuer nicht.
+cat > /etc/systemd/system/kafka.service <<'UNIT'
+[Unit]
+Description=JobRadar Kafka broker
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/kafka/bootstrap.sh
+ExecStop=/usr/bin/docker compose -f /opt/kafka/docker-compose.yml down
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now kafka.service

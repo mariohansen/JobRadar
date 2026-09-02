@@ -1,0 +1,19 @@
+# Kopie als terraform.tfvars anlegen und ausfuellen.
+# terraform.tfvars ist gitignored, die .example-Datei nicht.
+
+# Eigene oeffentliche IP fuer den SSH-Zugang zur Kafka-Instanz.
+# Ermitteln mit: curl -s https://checkip.amazonaws.com
+# Als /32 eintragen, damit wirklich nur diese eine Adresse zugelassen ist.
+admin_cidr = "203.0.113.42/32"
+
+# Empfaenger der Budget-Warnungen. AWS schickt einmalig eine
+# Bestaetigungsmail an diese Adresse, die quittiert werden muss -
+# sonst kommen die Warnungen spaeter nicht an.
+budget_alert_email = "deine.adresse@example.com"
+
+# Monatliches Kostenlimit in USD, ab dem gewarnt wird.
+monthly_budget_usd = "15"
+
+# Adresse fuer die Job-Benachrichtigungen. AWS schickt einmalig eine
+# Bestaetigungsmail, die quittiert werden muss.
+notification_email = "deine.adresse@example.com"

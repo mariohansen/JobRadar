@@ -1,0 +1,11 @@
+# Zeilenenden konsistent halten.
+#
+# Auf Windows steht core.autocrlf haeufig auf true. Ohne diese Regeln
+# bekaeme user_data.sh beim naechsten Checkout CRLF - und /bin/bash auf
+# der EC2-Instanz scheitert dann mit "bad interpreter", weil das
+# Wagenruecklaufzeichen Teil des Interpreterpfads wird.
+* text=auto
+
+*.sh text eol=lf
+*.tf text eol=lf
+*.py text eol=lf
