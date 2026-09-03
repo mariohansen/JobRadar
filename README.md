@@ -31,7 +31,7 @@ Die Pipeline läuft durchgängig von der API bis zur E-Mail.
 | `tracker rueckblick`: Punktzahl gegen tatsächlichen Ausgang | fertig |
 | `tracker warum` / `faellig`: Fehlersuche und offene Bewerbungen | fertig |
 
-335 Tests über sechs Services, alle ohne Netzzugriff lauffähig.
+338 Tests über sechs Services, alle ohne Netzzugriff lauffähig.
 
 ## Architektur
 
@@ -386,6 +386,11 @@ Autofilter über den ganzen Bereich.
 
 Ausgeblendete Anzeigen bleiben in DynamoDB – sonst tauchte dieselbe
 Stelle beim nächsten Lauf wieder auf.
+
+Ändert sich der Spaltensatz, räumt der Export die vorhandene Datei um,
+statt einen Neuaufbau zu verlangen. Der Status überlebt das; die Datei zu
+löschen ist nie nötig und kostet jede Auswahl, die seit dem letzten
+Export getroffen wurde.
 
 Anzeigen, deren **Titel** unter den Pipeline-Ausschluss fällt (`senior`, `lead`,
 `praktikum` … – die Liste aus `MATCH_AUSSCHLUSS`), kommen nicht in die Tabelle:

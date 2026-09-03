@@ -495,7 +495,19 @@ nicht per Tippen:
 Der Export liest die Auswahl zurück nach DynamoDB, **bevor** er von dort
 zurückschreibt – sonst überschriebe der Lauf die eigene Eingabe. Ein
 Zellinhalt, den er nicht kennt, wird gemeldet und übergangen, nicht
-geraten.
+geraten; Beschriftungen früherer Fassungen (`Beworben`, `Gefunden`)
+werden weiterhin verstanden.
+
+**Der Status überlebt jeden Schemawechsel.** Ändert sich der Spaltensatz,
+räumt der Export die vorhandene Datei um, statt einen Neuaufbau zu
+verlangen: Tracker-Spalten nehmen ihre Reihenfolge ein, eigene Spalten
+wandern nach rechts, abgelegte fallen weg. Die Datei zu **löschen** ist
+dagegen nie nötig und kostet jede Auswahl, die seit dem letzten Export
+getroffen wurde – bis dahin steht sie nur in der Datei.
+
+Umgekehrt gilt: ein Export gegen eine **veraltete Kopie** der Tabelle
+dreht Entscheidungen zurück, denn die Tabelle ist für den Status die
+Wahrheit. Mit einer Datei arbeiten, nicht mit mehreren.
 
 Ausgeblendete Anzeigen bleiben in DynamoDB, damit dieselbe Stelle nicht
 beim nächsten Lauf erneut auftaucht.

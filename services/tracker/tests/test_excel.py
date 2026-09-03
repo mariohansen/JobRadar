@@ -146,11 +146,11 @@ def test_zuordnung_ueber_firma_und_position_ohne_link(tmp_path):
     assert (bericht.neu, bericht.aktualisiert) == (0, 1)
 
 
-def test_eigene_spalten_und_reihenfolge_bleiben_erhalten(tmp_path):
+def test_eigene_spalten_bleiben_erhalten_und_wandern_nach_rechts(tmp_path):
+    """Die Tracker-Spalten nehmen ihre feste Ordnung ein, eigene folgen."""
     ziel = tmp_path / "tracker.xlsx"
     mappe = Workbook()
     blatt = mappe.active
-    # Eigene Spalte vorn, Tracker-Spalten in anderer Reihenfolge.
     for spalte, name in enumerate(["Bauchgefühl", "Position", "Firma"], start=1):
         blatt.cell(row=1, column=spalte, value=name)
     blatt.cell(row=2, column=1, value="gut")
@@ -162,15 +162,16 @@ def test_eigene_spalten_und_reihenfolge_bleiben_erhalten(tmp_path):
 
     blatt, spalten = lies(ziel)
     assert blatt.max_row == 2
-    assert spalten["Bauchgefühl"] == 1
-    assert blatt.cell(row=2, column=1).value == "gut"
-    # Fehlende Tracker-Spalten kommen rechts dazu, ohne die vorhandenen
-    # zu verschieben.
-    assert spalten["Quelle"] > 3
+    # Der Inhalt der eigenen Spalte ist mitgewandert, nicht verloren.
+    assert blatt.cell(row=2, column=spalten["Bauchgefühl"]).value == "gut"
+    assert spalten["Bauchgefühl"] > spalten["Quelle"]
+    # Und die Tracker-Spalten stehen in der vorgegebenen Reihenfolge.
+    assert spalten["Nr."] < spalten["Firma"] < spalten["Position"]
     assert blatt.cell(row=2, column=spalten["Standort"]).value == "20095 Hamburg"
 
 
 def test_ueberschrift_mit_leerzeichen_legt_keine_zweite_spalte_an(tmp_path):
+    """Von Hand gepflegte Koepfe tragen gern ein Leerzeichen zu viel."""
     ziel = tmp_path / "tracker.xlsx"
     mappe = Workbook()
     mappe.active.cell(row=1, column=1, value="Firma ")
@@ -179,7 +180,8 @@ def test_ueberschrift_mit_leerzeichen_legt_keine_zweite_spalte_an(tmp_path):
     excel.schreibe(ziel, [zeile()])
 
     _, spalten = lies(ziel)
-    assert [name for name in spalten if name.strip() == "Firma"] == ["Firma "]
+    # Genau eine Firma-Spalte, in der kanonischen Schreibweise.
+    assert [name for name in spalten if name.strip() == "Firma"] == ["Firma"]
 
 
 def test_neue_anzeigen_haengen_unten_an_und_werden_durchnummeriert(tmp_path):
@@ -396,3 +398,79 @@ def test_laufende_bewerbungen_stehen_oben_absagen_unten(tmp_path):
     # Laufendes zuerst (weiteste Stufe oben), dann Neues nach Passung,
     # Erledigtes ganz unten - unabhaengig von der Punktzahl.
     assert reihenfolge == ["interview", "beworben", "neu-a", "neu-b", "absage"]
+
+
+# --- Umzug zwischen Fassungen -----------------------------------------
+
+
+def test_alter_spaltensatz_wird_umgeraeumt_statt_verworfen(tmp_path):
+    """Die Statusauswahl darf einen Schemawechsel ueberleben.
+
+    Die Tabelle ist das Eingabefeld. Sie zu loeschen und neu aufzubauen
+    hiesse, jede Auswahl zu verlieren, die seit dem letzten Export
+    getroffen wurde.
+    """
+    ziel = tmp_path / "tracker.xlsx"
+    mappe = Workbook()
+    blatt = mappe.active
+    # Ein Spaltensatz aus einer frueheren Fassung, in alter Reihenfolge.
+    alt = [
+        "Nr.", "Firma", "Position", "Datum Abgabe", "Link zur Ausschreibung",
+        "Status", "Nächster Schritt", "Notizen", "Bauchgefühl",
+        felder.SPALTE_REFERENZ,
+    ]
+    for spalte, name in enumerate(alt, start=1):
+        blatt.cell(row=1, column=spalte, value=name)
+    werte = {
+        "Nr.": 1, "Firma": "Beispiel GmbH", "Position": "Data Engineer",
+        "Datum Abgabe": "2025-09-05", "Status": "Abgeschickt",
+        "Nächster Schritt": "nachfassen", "Notizen": "Telefonat",
+        "Bauchgefühl": "gut", felder.SPALTE_REFERENZ: "10001-1-S",
+    }
+    for spalte, name in enumerate(alt, start=1):
+        blatt.cell(row=2, column=spalte, value=werte.get(name))
+    mappe.save(ziel)
+
+    # Erste Haelfte: der Export liest die Auswahl aus dem alten Blatt,
+    # bevor er irgendetwas schreibt. Genau das rettet sie.
+    assert excel.lies_status(ziel) == {"10001-1-S": "Abgeschickt"}
+
+    # Zweite Haelfte: mit dem abgeglichenen Status wird umgeraeumt.
+    bericht = excel.schreibe(
+        ziel, [zeile(referenz="10001-1-S", **{"Status": "Abgeschickt"})]
+    )
+
+    assert bericht.umgeraeumt is True
+    blatt, spalten = lies(ziel)
+    assert blatt.max_row == 2
+    # Die Auswahl hat den Umzug ueberlebt - darum geht es.
+    assert blatt.cell(row=2, column=spalten["Status"]).value == "Abgeschickt"
+    # Eigene Spalte auch.
+    assert blatt.cell(row=2, column=spalten["Bauchgefühl"]).value == "gut"
+    # Abgelegte Tracker-Spalten sind weg.
+    for weg in ("Datum Abgabe", "Nächster Schritt", "Notizen"):
+        assert weg not in spalten
+    # Neue Reihenfolge steht: Status vor Firma, eigene Spalte ganz rechts.
+    assert spalten["Nr."] < spalten["Status"] < spalten["Firma"]
+    assert spalten["Bauchgefühl"] > spalten["Quelle"]
+
+
+def test_zweiter_lauf_raeumt_nicht_noch_einmal_um(tmp_path):
+    ziel = tmp_path / "tracker.xlsx"
+    excel.schreibe(ziel, [zeile()])
+
+    bericht = excel.schreibe(ziel, [zeile()])
+
+    assert bericht.umgeraeumt is False
+
+
+def test_auswahlfeld_und_farben_stapeln_sich_nicht(tmp_path):
+    """Zehn Exporte duerfen nicht zehn gleiche Regeln hinterlassen."""
+    ziel = tmp_path / "tracker.xlsx"
+    for _ in range(3):
+        excel.schreibe(ziel, [zeile(**{"Passung": "A – Volltreffer", "Punkte": 80})],
+                       spalten=felder.SPALTEN_MIT_PASSUNG)
+
+    blatt = load_workbook(ziel).active
+    assert len(blatt.data_validations.dataValidation) == 1
+    assert len(list(blatt.conditional_formatting)) == 2

@@ -72,6 +72,21 @@ SPALTEN_MIT_PASSUNG: tuple[str, ...] = (
 # Rueckwaertskompatibler Name: der Standardsatz ohne Passung.
 SPALTEN: tuple[str, ...] = SPALTEN_STANDARD
 
+# Spalten, die es einmal gab und die der Export nicht mehr fuehrt. Sie
+# werden beim Umraeumen entfernt - im Unterschied zu eigenen Spalten, die
+# er nicht kennt und deshalb stehen laesst.
+ABGELEGTE_SPALTEN: tuple[str, ...] = (
+    "Datum Abgabe",
+    "Frist Rückmeldung",
+    "Datum Rückmeldung",
+    "Notizen",
+    "Nächster Schritt",
+    "Bewerbungsweg",
+    "Ansprechpartner",
+    "Kontakt (E-Mail/Telefon)",
+    "Gehalt (Angabe/Erwartung)",
+)
+
 # Zusaetzliche, ausgeblendete Spalte. Ohne sie liesse sich beim naechsten
 # Export nicht erkennen, welche Zeile zu welcher Anzeige gehoert.
 SPALTE_REFERENZ = "Referenz"

@@ -42,6 +42,11 @@ AUSWAHL = tuple(TEXT[s] for s in (BEWORBEN, INTERVIEW, ZUSAGE, ABSAGE, UNINTERES
 
 _AUS_TEXT = {text.casefold(): status for status, text in TEXT.items() if text}
 
+# Beschriftungen frueherer Fassungen. Eine Tabelle, die noch "Beworben"
+# stehen hat, soll nicht als unbekannt durchfallen und dabei die
+# Entscheidung verlieren.
+_AUS_TEXT.update({"beworben": BEWORBEN, "gefunden": GEFUNDEN})
+
 
 class UnbekannterStatus(ValueError):
     """Ein Status, den der Tracker nicht kennt."""

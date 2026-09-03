@@ -29,6 +29,7 @@ from typing import Any, Iterable
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
 
@@ -110,6 +111,7 @@ class Bericht:
     aktualisiert: int
     sicherung: str | None
     entfernt: int = 0
+    umgeraeumt: bool = False
 
 
 def _schluessel(ueberschrift: Any) -> str:
@@ -141,6 +143,9 @@ class Tabelle:
     def __init__(self, blatt) -> None:
         self._blatt = blatt
         self._spalten: dict[str, int] = {}
+        # Vergleichsform -> wie die Ueberschrift wirklich dasteht. Beim
+        # Umraeumen sollen eigene Spalten ihre Schreibweise behalten.
+        self._ueberschriften: dict[str, str] = {}
         self._lies_kopfzeile()
 
     def _lies_kopfzeile(self) -> None:
@@ -148,6 +153,7 @@ class Tabelle:
             name = _schluessel(zelle.value)
             if name and name not in self._spalten:
                 self._spalten[name] = nummer
+                self._ueberschriften[name] = str(zelle.value)
 
     def ergaenze_spalten(self, spalten: Iterable[str]) -> None:
         """Legt fehlende Spalten rechts an, ohne bestehende zu verschieben."""
@@ -157,7 +163,75 @@ class Tabelle:
                 continue
             self._blatt.cell(row=1, column=naechste, value=name)
             self._spalten[_schluessel(name)] = naechste
+            self._ueberschriften[_schluessel(name)] = name
             naechste += 1
+
+    def ordne_spalten(self, spalten: Iterable[str]) -> bool:
+        """Bringt die Spalten in die vorgegebene Reihenfolge.
+
+        Aendert sich der Spaltensatz zwischen zwei Fassungen, waere die
+        Alternative, die Datei zu loeschen und neu aufzubauen - und dabei
+        jede Statusauswahl zu verlieren, die seit dem letzten Export
+        getroffen wurde. Die Tabelle ist das Eingabefeld; sie zu
+        verwerfen heisst, Eingaben zu verwerfen. Deshalb wird umgeraeumt
+        statt neu angelegt.
+
+        Eigene Spalten bleiben erhalten und wandern nach rechts.
+        Abgelegte Tracker-Spalten (felder.ABGELEGTE_SPALTEN) fallen weg -
+        sie sind leer und stuenden nur im Weg.
+
+        Meldet zurueck, ob etwas zu tun war.
+        """
+        ziel = [*spalten, felder.SPALTE_REFERENZ]
+        kanonisch = {_schluessel(name): name for name in ziel}
+        abgelegt = {_schluessel(name) for name in felder.ABGELEGTE_SPALTEN}
+
+        # In Blattreihenfolge, damit eigene Spalten ihre bisherige
+        # Ordnung behalten.
+        vorhanden = [name for name, _ in sorted(self._spalten.items(), key=lambda p: p[1])]
+        fremd = [name for name in vorhanden if name not in kanonisch and name not in abgelegt]
+        neu = [name for name in kanonisch] + fremd
+
+        if vorhanden == neu:
+            return False
+
+        zeilen = self.datenzeilen()
+        daten = [
+            {name: self._blatt.cell(row=nummer, column=spalte).value
+             for name, spalte in self._spalten.items()}
+            for nummer in zeilen
+        ]
+
+        # Blatt leeren. Breiten, Ausblendung, Auswahlfeld und Farben
+        # haengen an Spaltenbuchstaben und waeren nach dem Umraeumen auf
+        # der falschen Spalte - sie werden hinterher neu gesetzt.
+        if self._blatt.max_row:
+            self._blatt.delete_rows(1, self._blatt.max_row)
+        self._blatt.column_dimensions.clear()
+        self._blatt.data_validations.dataValidation = []
+        self._blatt.conditional_formatting = ConditionalFormattingList()
+
+        for spalte, name in enumerate(neu, start=1):
+            beschriftung = kanonisch.get(name) or self._ueberschriften.get(name, name)
+            self._blatt.cell(row=1, column=spalte, value=beschriftung)
+
+        sp_link = next(
+            (i for i, name in enumerate(neu, start=1)
+             if name == _schluessel("Link zur Ausschreibung")),
+            None,
+        )
+        for versatz, werte in enumerate(daten):
+            for spalte, name in enumerate(neu, start=1):
+                wert = werte.get(name)
+                zelle = self._blatt.cell(row=2 + versatz, column=spalte, value=wert)
+                if spalte == sp_link and wert:
+                    zelle.hyperlink = wert
+                    zelle.font = LINK_SCHRIFT
+
+        self._spalten = {}
+        self._ueberschriften = {}
+        self._lies_kopfzeile()
+        return True
 
     def spalte(self, name: str) -> int:
         return self._spalten[_schluessel(name)]
@@ -399,6 +473,9 @@ class Tabelle:
             return
 
         buchstabe = get_column_letter(self.spalte("Status"))
+        # Bei jedem Lauf neu setzen - ohne das Leeren stapelten sich
+        # nach zehn Exporten zehn gleiche Pruefungen im Blatt.
+        self._blatt.data_validations.dataValidation = []
         pruefung = DataValidation(
             type="list",
             formula1='"' + ",".join(st.AUSWAHL) + '"',
@@ -534,6 +611,10 @@ class Tabelle:
         if letzte < 2:
             return
 
+        # Dieselbe Ueberlegung wie beim Auswahlfeld: Regeln wuerden sich
+        # sonst mit jedem Export vervielfachen.
+        self._blatt.conditional_formatting = ConditionalFormattingList()
+
         if _schluessel("Passung") in self._spalten:
             buchstabe = get_column_letter(self.spalte("Passung"))
             bereich = f"{buchstabe}2:{buchstabe}{letzte}"
@@ -633,6 +714,7 @@ def schreibe(
 
     tabelle = Tabelle(blatt)
     tabelle.ergaenze_spalten(spalten)
+    umgeraeumt = tabelle.ordne_spalten(spalten)
 
     neu = 0
     aktualisiert = 0
@@ -661,6 +743,7 @@ def schreibe(
     os.replace(zwischen, ziel)
 
     return Bericht(
+        umgeraeumt=umgeraeumt,
         datei=str(ziel),
         neu=neu,
         aktualisiert=aktualisiert,
