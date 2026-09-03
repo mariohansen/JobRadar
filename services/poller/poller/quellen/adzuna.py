@@ -8,6 +8,9 @@ Adzuna sammelt aus vielen Portalen und liefert deshalb absehbar Anzeigen,
 die auch anderswo stehen. Genau dafuer gibt es den inhaltlichen
 Fingerabdruck im filter-dedup.
 
+Gefiltert wird trotz Suchparameter noch einmal auf den Titel: `what`
+sucht unscharf und ueber den gesamten Anzeigentext.
+
 Die Trefferliste enthaelt nur einen Auszug des Anzeigentextes. Das reicht
 fuer die Passungsbewertung meist nicht, ist aber besser als nichts - und
 der Auszug nennt die geforderten Techniken erfahrungsgemaess zuerst.
@@ -96,8 +99,24 @@ def hole(config: Any) -> Iterator[dict[str, Any]]:
 
             for job in treffer:
                 uebersetzt = _uebersetze(job)
-                if uebersetzt is not None:
-                    yield uebersetzt
+                if uebersetzt is None:
+                    continue
+                # Der Parameter `what` sucht unscharf und ueber den
+                # ganzen Anzeigentext: eine Suche nach "Java" liefert
+                # auch Bauingenieure, in deren Text das Wort irgendwo
+                # vorkommt. Deshalb derselbe Titelfilter wie bei den
+                # Quellen ohne Feldsuche - gemessen bleiben davon rund
+                # zwei von fuenf uebrig.
+                if not basis.passt_zum_begriff(
+                    uebersetzt["stellenangebotsTitel"], config.suchbegriffe
+                ):
+                    continue
+                if not basis.im_zeitfenster(
+                    uebersetzt["datumErsteVeroeffentlichung"],
+                    config.veroeffentlicht_seit_tagen,
+                ):
+                    continue
+                yield uebersetzt
 
             if len(treffer) < JE_SEITE:
                 break

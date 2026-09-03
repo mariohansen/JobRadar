@@ -248,3 +248,40 @@ def test_mehrere_begriffe_reichen_einzeln():
 
 def test_leerer_titel_passt_nie():
     assert not basis.passt_zum_begriff("", ("Java",))
+
+
+# --- Adzuna -----------------------------------------------------------
+
+
+def test_adzuna_filtert_die_unscharfe_suche_nach(monkeypatch):
+    """`what` sucht ueber den ganzen Text - der Titel entscheidet."""
+    from poller.quellen import adzuna
+
+    monkeypatch.setenv("ADZUNA_APP_ID", "kennung")
+    monkeypatch.setenv("ADZUNA_APP_KEY", "schluessel")
+
+    antwort = {
+        "results": [
+            {"id": 1, "title": "Data Engineer (m/w/d)", "company": {"display_name": "A"},
+             "location": {"display_name": "Hamburg"}, "description": "x",
+             "created": "2026-08-17", "redirect_url": "https://a"},
+            {"id": 2, "title": "Bauingenieur Tragwerkplanung", "company": {"display_name": "B"},
+             "location": {"display_name": "Hamburg"}, "description": "x",
+             "created": "2026-08-17", "redirect_url": "https://b"},
+        ]
+    }
+    monkeypatch.setattr(basis, "hole_json", lambda url, kopfzeilen=None: antwort)
+    monkeypatch.setattr(basis, "pause", lambda: None)
+
+    treffer = list(adzuna.hole(config()))
+
+    assert [t["referenznummer"] for t in treffer] == ["adzuna:1"]
+
+
+def test_adzuna_ohne_zugangsdaten_liefert_nichts(monkeypatch):
+    from poller.quellen import adzuna
+
+    monkeypatch.delenv("ADZUNA_APP_ID", raising=False)
+    monkeypatch.delenv("ADZUNA_APP_KEY", raising=False)
+
+    assert list(adzuna.hole(config())) == []
