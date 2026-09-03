@@ -32,7 +32,25 @@ SSH="ssh -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-n
 # Quellcode uebertragen. tar ueber die Pipe erspart es, scp fuer jede
 # Datei einzeln aufzurufen, und uebernimmt die Verzeichnisstruktur.
 echo "Uebertrage Quellcode..."
-tar czf -   --exclude="__pycache__" --exclude="*.pyc" --exclude="build" --exclude="*.zip"   -C services filter-dedup notifier   | $SSH "sudo install -d -o ec2-user -g ec2-user /opt/jobradar && tar xzf - -C /opt/jobradar"
+# gemeinsam/ enthaelt Faehigkeitsverzeichnis, Bewertung und Archiv-
+# zugriff. Der filter-dedup braucht es zum Anreichern; ohne dieses
+# Paket startet er nicht.
+tar czf -   --exclude="__pycache__" --exclude="*.pyc" --exclude="build" --exclude="*.zip"   -C services filter-dedup notifier gemeinsam   | $SSH "sudo install -d -o ec2-user -g ec2-user /opt/jobradar && tar xzf - -C /opt/jobradar"
+
+# Das Faehigkeitsprofil, falls vorhanden. Es enthaelt keine Unterlagen,
+# nur die daraus erkannten Schlagwoerter - trotzdem verlaesst damit
+# etwas Persoenliches den eigenen Rechner. Ohne die Datei laeuft die
+# Pipeline wie zuvor, nur ohne Bewertung in der Mail.
+PROFIL_LOKAL=bewerbung/profil.json
+if [ -f "$PROFIL_LOKAL" ]; then
+  echo "Uebertrage Faehigkeitsprofil (Schlagwoerter, keine Unterlagen)..."
+  $SSH "cat > /opt/jobradar/profil.json" < "$PROFIL_LOKAL"
+  PROFIL_ENTFERNT=/opt/jobradar/profil.json
+else
+  echo "Kein $PROFIL_LOKAL - Anzeigen werden ohne Bewertung gemeldet."
+  echo "  Anlegen mit: (cd services/tracker && python -m tracker.main profil)"
+  PROFIL_ENTFERNT=
+fi
 
 # Konfiguration. Enthaelt keine Geheimnisse - nur die Namen der
 # SSM-Parameter, aus denen die Dienste Passwort und Zertifikat holen.
@@ -47,6 +65,7 @@ KAFKA_TOPIC_MATCHED=jobs.matched
 DYNAMODB_TABLE_SEEN_JOBS=$TABELLE
 MATCH_AUSSCHLUSS=praktikum,werkstudent,ausbildung,minijob,aushilfe,schulpraktikum,senior,sr,lead,teamlead,leiter,teamleiter,principal,staff,head of
 S3_BUCKET_RAW_ARCHIVE=$BUCKET
+JOBRADAR_PROFIL=$PROFIL_ENTFERNT
 SES_SENDER_ADDRESS=$MAIL
 SES_RECIPIENT_ADDRESS=$MAIL
 AWS_DEFAULT_REGION=eu-central-1
@@ -100,6 +119,10 @@ Type=simple
 User=ec2-user
 WorkingDirectory=/opt/jobradar/\$DIENST
 EnvironmentFile=/opt/jobradar/env
+# Das gemeinsame Paket liegt neben den Diensten. Die Pakete finden es
+# zwar auch selbst ueber ihren Ablageort, aber ein gesetzter Pfad ist
+# das, worauf man beim Suchen zuerst schaut.
+Environment=PYTHONPATH=/opt/jobradar/gemeinsam
 ExecStart=/opt/jobradar/venv/bin/python -m \$MODUL.main
 # Bei einem Absturz neu starten. Dank bestaetigter Offsets setzt der
 # Dienst dort fort, wo er aufgehoert hat.

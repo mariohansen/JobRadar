@@ -1,0 +1,4 @@
+# Nur fuer das Einlesen der eigenen Unterlagen. Wer bloss bewertet -
+# etwa der filter-dedup auf der Instanz - braucht es nicht; profil.py
+# importiert es erst beim Lesen einer PDF-Datei.
+pypdf>=6.0

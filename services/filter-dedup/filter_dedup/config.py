@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from gemeinsam.ausschluss import STANDARD as STANDARD_AUSSCHLUSS
+
 
 class ConfigError(RuntimeError):
     """Eine benoetigte Umgebungsvariable fehlt oder ist unbrauchbar."""
@@ -68,6 +70,8 @@ def _passwort() -> str:
 class FilterConfig:
     tabelle: str
     bucket: str
+    profil_pfad: str
+    mit_details: bool
     ausschluss: tuple[str, ...]
     pflicht: tuple[str, ...]
     aufbewahrung_tage: int
@@ -79,28 +83,20 @@ class FilterConfig:
             bucket=_required("S3_BUCKET_RAW_ARCHIVE"),
             # Anzeigen, die zwar zum Suchbegriff passen, aber nicht zur
             # Lebenslage - der haeufigste Grund fuer unbrauchbare Treffer.
-            #
-            # Drei Gruppen:
-            #
-            # Erfahrungsstufe: "senior" und "sr". Verglichen wird auf den
-            # Wortanfang, deshalb deckt "sr" auch "Sr." ab, ohne in
-            # "Israel" anzuschlagen.
-            #
-            # Fuehrungsrollen: "lead" erfasst auch "Leader", braucht aber
-            # "teamlead" als eigenen Eintrag, weil dort kein Wortanfang
-            # steht. Dasselbe gilt fuer "leiter" und "teamleiter".
-            #
-            # Bewusst nicht dabei: "manager". Der Begriff steht auch in
-            # Titeln wie "Junior Customer Success Manager" und wuerde
-            # damit Einstiegsstellen aussortieren.
-            ausschluss=_liste(
-                "MATCH_AUSSCHLUSS",
-                "praktikum,werkstudent,ausbildung,minijob,aushilfe,"
-                "schulpraktikum,senior,sr,"
-                "lead,teamlead,leiter,teamleiter,principal,staff,head of",
-            ),
+            # Die Liste und die Begruendung stehen in
+            # gemeinsam.ausschluss, damit der tracker dieselbe anwendet.
+            # Leer oder nicht gesetzt bedeutet: die Vorgabe von dort.
+            ausschluss=_liste("MATCH_AUSSCHLUSS") or STANDARD_AUSSCHLUSS,
             # Leer bedeutet: keine Einschraenkung. Sonst muss mindestens
             # einer dieser Begriffe vorkommen.
             pflicht=_liste("MATCH_PFLICHT"),
+            # Ohne Profil laeuft alles wie bisher, nur ohne Bewertung.
+            # Die Datei legt das Ausrollskript ab; ins Repo gehoert sie
+            # nicht.
+            profil_pfad=os.environ.get("JOBRADAR_PROFIL", "").strip(),
+            # Der Anzeigentext kostet je neuer Anzeige einen Abruf. Wer
+            # das nicht will, verliert nur die Bewertung.
+            mit_details=os.environ.get("FILTER_DETAILS", "true").strip().lower()
+            not in ("false", "0", "nein", "no"),
             aufbewahrung_tage=int(os.environ.get("DEDUP_AUFBEWAHRUNG_TAGE", "180")),
         )

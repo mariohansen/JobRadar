@@ -62,10 +62,16 @@ def installiere_abhaengigkeiten() -> None:
 
 
 def kopiere_quellcode() -> None:
+    ohne_muell = shutil.ignore_patterns("__pycache__", "*.pyc")
+    shutil.copytree(HIER / "poller", BUILD / "poller", ignore=ohne_muell)
+    # Der Poller berechnet den inhaltlichen Fingerabdruck mit demselben
+    # Code wie der filter-dedup. Liefe hier eine eigene Kopie mit, fielen
+    # beide nach der ersten einseitigen Aenderung auseinander - und die
+    # Deduplizierung ueber Quellen hinweg waere lautlos kaputt.
     shutil.copytree(
-        HIER / "poller",
-        BUILD / "poller",
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        HIER.parent / "gemeinsam" / "gemeinsam",
+        BUILD / "gemeinsam",
+        ignore=ohne_muell,
     )
 
 

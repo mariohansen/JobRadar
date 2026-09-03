@@ -1,7 +1,8 @@
 """Filter- und Dedup-Consumer.
 
-Liest jobs.raw, archiviert jede Anzeige, verwirft bereits bekannte und
-unpassende und schreibt den Rest nach jobs.matched.
+Liest jobs.raw, archiviert jede Anzeige, verwirft bereits bekannte,
+anderswo schon gemeldete und unpassende und schreibt den Rest nach
+jobs.matched.
 """
 from __future__ import annotations
 
@@ -14,7 +15,10 @@ from typing import Any
 
 from confluent_kafka import Consumer, KafkaError, Producer
 
-from .archive import Archiv
+from gemeinsam import fingerabdruck
+from gemeinsam.archiv import Archiv
+
+from .anreicherung import Anreicherung, sicher_ergaenzen
 from .config import ConfigError, FilterConfig, KafkaConfig
 from .dedup import Dedup
 from .matching import passt
@@ -74,17 +78,30 @@ def verarbeite(
     filter_config: FilterConfig,
     producer: Producer,
     topic_matched: str,
+    anreicherung: Anreicherung | None = None,
 ) -> str:
     """Verarbeitet eine Anzeige und meldet zurueck, was mit ihr geschah."""
     # Archiviert wird vor jeder Filterung: das Archiv soll den
-    # vollstaendigen Rohbestand enthalten, auch die aussortierten.
+    # vollstaendigen Rohbestand enthalten, auch die aussortierten. Und
+    # unveraendert - die Anreicherung kommt erst danach dazu.
     archiv.ablegen(referenznummer, job)
 
     if not dedup.ist_neu(referenznummer, job.get("stellenangebotsTitel", "")):
         return "bekannt"
 
+    # Die Kennung ist nur innerhalb einer Quelle eindeutig. Dieselbe
+    # Stelle steht oft auf mehreren Portalen - der inhaltliche
+    # Fingerabdruck aus Arbeitgeber, Titel und Ort faengt das ab.
+    schluessel = fingerabdruck.schluessel(job)
+    if schluessel is not None and not dedup.ist_inhaltlich_neu(schluessel, referenznummer):
+        return "doppelt"
+
     if not passt(job, filter_config.ausschluss, filter_config.pflicht):
         return "aussortiert"
+
+    # Erst hier, nach Dedup und Filter: nur was wirklich neu ist und
+    # durchkommt, ist einen Abruf des Anzeigentextes wert.
+    sicher_ergaenzen(anreicherung, job, referenznummer)
 
     producer.produce(
         topic=topic_matched,
@@ -94,19 +111,46 @@ def verarbeite(
     return "weitergereicht"
 
 
+def _profil(filter_config: FilterConfig):
+    """Faehigkeitsprofil, falls eines ausgerollt wurde.
+
+    Fehlt es oder ist es unlesbar, laeuft die Pipeline ohne Bewertung
+    weiter - das ist der Zustand, in dem sie bisher lief.
+    """
+    if not filter_config.profil_pfad:
+        log.info("Kein Profil gesetzt, Anzeigen werden nicht bewertet")
+        return None
+
+    from pathlib import Path
+
+    from gemeinsam import profil as pr
+
+    try:
+        geladen = pr.lade(Path(filter_config.profil_pfad))
+    except pr.ProfilFehler as exc:
+        log.warning("Profil nicht geladen, keine Bewertung: %s", exc)
+        return None
+
+    log.info("Profil geladen: %s Faehigkeiten", len(geladen.alle))
+    return geladen
+
+
 def run() -> dict[str, int]:
     kafka_config = KafkaConfig.from_env()
     filter_config = FilterConfig.from_env()
 
     archiv = Archiv(filter_config.bucket)
     dedup = Dedup(filter_config.tabelle, filter_config.aufbewahrung_tage)
+    anreicherung = Anreicherung(
+        archiv, _profil(filter_config), filter_config.mit_details
+    )
     producer = Producer({**sicherheitsoptionen(kafka_config), "acks": "all"})
 
     consumer = baue_consumer(kafka_config)
     consumer.subscribe([kafka_config.topic_raw])
     log.info("Lese %s als Gruppe %s", kafka_config.topic_raw, kafka_config.gruppe)
 
-    zaehler = {"bekannt": 0, "aussortiert": 0, "weitergereicht": 0}
+    zaehler = {"bekannt": 0, "doppelt": 0, "aussortiert": 0, "weitergereicht": 0}
 
     try:
         while _laeuft:
@@ -135,6 +179,7 @@ def run() -> dict[str, int]:
                 filter_config,
                 producer,
                 kafka_config.topic_matched,
+                anreicherung,
             )
             zaehler[ergebnis] += 1
 
@@ -149,9 +194,11 @@ def run() -> dict[str, int]:
         consumer.close()
         producer.flush(timeout=15)
         log.info(
-            "Beendet. %s weitergereicht, %s bekannt, %s aussortiert",
+            "Beendet. %s weitergereicht, %s bekannt, %s doppelt (andere Quelle), "
+            "%s aussortiert",
             zaehler["weitergereicht"],
             zaehler["bekannt"],
+            zaehler["doppelt"],
             zaehler["aussortiert"],
         )
 

@@ -22,6 +22,12 @@ class ConfigError(RuntimeError):
 # als Fehler meldet, pruefen wir es hier.
 ERLAUBTES_ZEITFENSTER = (0, 1, 7, 14, 28)
 
+# Bei der Bundesagentur ist jeder Begriff eine eigene Suche, bei den
+# uebrigen Quellen ein Filter auf den Titel. Mehrere lohnen sich deshalb
+# doppelt: sie erweitern den Bestand und sind die einzige Stellschraube,
+# ueber die aus den anderen Boersen ueberhaupt etwas ankommt.
+VORGABE_SUCHBEGRIFFE = "Data Engineer,Softwareentwickler,Software Engineer,Developer,Java"
+
 
 def _required(name: str) -> str:
     value = os.environ.get(name, "").strip()
@@ -78,12 +84,16 @@ class SearchConfig:
     # Einschraenkung waere der Suchraum ganz Deutschland.
     remote_bundesweit: bool
     remote_min_prozent: int
+    # Welche Stellenboersen abgefragt werden. Die Namen stehen im
+    # Verzeichnis in poller.quellen. Die Vorgabe hier ist die
+    # urspruengliche Quelle - `from_env` setzt den wirklichen Wert.
+    quellen: tuple[str, ...] = ("arbeitsagentur",)
 
     @classmethod
     def from_env(cls) -> "SearchConfig":
         begriffe = tuple(
             teil.strip()
-            for teil in os.environ.get("JOBSUCHE_WAS", "Data Engineer").split(",")
+            for teil in os.environ.get("JOBSUCHE_WAS", VORGABE_SUCHBEGRIFFE).split(",")
             if teil.strip()
         )
         if not begriffe:
@@ -112,7 +122,30 @@ class SearchConfig:
             # nur teilweise remote sind - dann ist die Entfernung zum
             # Arbeitsort wieder ein Thema.
             remote_min_prozent=_int("JOBSUCHE_REMOTE_MIN_PROZENT", 100),
+            quellen=_quellen(),
         )
+
+
+def _quellen() -> tuple[str, ...]:
+    """Namen der abzufragenden Stellenboersen.
+
+    Import erst hier, nicht oben: `quellen` zieht die einzelnen
+    Quellmodule nach sich, und `config` soll auch dann ladbar bleiben,
+    wenn an einer davon gerade etwas kaputt ist.
+    """
+    from .quellen import VORGABE, UnbekannteQuelle, pruefe
+
+    roh = os.environ.get("POLLER_QUELLEN", "").strip()
+    if not roh:
+        return VORGABE
+
+    namen = tuple(teil.strip().lower() for teil in roh.split(",") if teil.strip())
+    if not namen:
+        return VORGABE
+    try:
+        return pruefe(namen)
+    except UnbekannteQuelle as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 @dataclass(frozen=True)

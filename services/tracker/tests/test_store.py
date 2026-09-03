@@ -138,3 +138,26 @@ def test_eintrag_vertraegt_fehlende_felder():
     assert eintrag.titel == ""
     assert eintrag.status == st.GEFUNDEN
     assert eintrag.geaendert_am is None
+
+
+def test_merkposten_des_quellenabgleichs_sind_keine_anzeigen():
+    """Sie liegen in derselben Tabelle, gehoeren aber nicht in die Liste."""
+    from gemeinsam import fingerabdruck
+
+    class FakeTabelle:
+        def scan(self, **argumente):
+            return {
+                "Items": [
+                    {"referenznummer": "10001-1-S", "titel": "Data Engineer",
+                     "status": "GEFUNDEN", "erfasst_am": 1756684800},
+                    {"referenznummer": fingerabdruck.PRAEFIX + "abc",
+                     "zuerst_gesehen_als": "10001-1-S", "erfasst_am": 1756684800},
+                ]
+            }
+
+    store = Store.__new__(Store)
+    store._tabelle = FakeTabelle()
+
+    eintraege = list(store.liste())
+
+    assert [e.referenznummer for e in eintraege] == ["10001-1-S"]

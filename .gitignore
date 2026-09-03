@@ -28,6 +28,38 @@ venv/
 .pytest_cache/
 *.egg-info/
 
+# Persoenliche Bewerbungsunterlagen.
+#
+# Lebenslauf, Zeugnisse und das daraus abgeleitete Faehigkeitsprofil
+# gehoeren niemandem ausser dir. Sie liegen in bewerbung/ und verlassen
+# den Rechner nicht - weder ins Repo noch nach S3.
+#
+# Doppelt abgesichert: das Verzeichnis, und zusaetzlich die ueblichen
+# Dateinamen an jeder Stelle im Baum, falls doch einmal eine Kopie
+# woanders landet.
+bewerbung/
+*.pdf
+*.docx
+*.doc
+*.odt
+Lebenslauf*
+lebenslauf*
+Arbeitszeugnis*
+arbeitszeugnis*
+Zeugnis*
+zeugnis*
+[Cc][Vv].*
+profil.json
+
+# Der erzeugte Skill-Trend. Enthaelt die eigenen Luecken und gehoert
+# damit zur selben Kategorie wie das Profil.
+dashboards/*.html
+
+# Die ausgefuellte Bewerbungstabelle. Enthaelt Fundstuecke, eigene
+# Notizen und die Passungsbewertung - nichts davon gehoert ins Repo.
+*.xlsx
+*.xls
+
 # Java / Maven
 target/
 *.class

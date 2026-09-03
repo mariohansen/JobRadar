@@ -14,6 +14,8 @@ from typing import Any, Iterator
 import boto3
 from botocore.exceptions import ClientError
 
+from gemeinsam import fingerabdruck
+
 from . import status as st
 
 
@@ -57,6 +59,10 @@ class Store:
         hundert Anzeigen ist das unproblematisch und spart einen
         zusaetzlichen Index; bei sehr grossen Bestaenden waere ein
         globaler Sekundaerindex auf den Status der richtige Weg.
+
+        Uebersprungen werden die Merkposten, die der filter-dedup fuer
+        den quellenuebergreifenden Abgleich anlegt: sie stehen in
+        derselben Tabelle, sind aber keine Anzeigen.
         """
         argumente: dict[str, Any] = {}
         if nur_status:
@@ -71,6 +77,10 @@ class Store:
         while True:
             antwort = self._tabelle.scan(**argumente)
             for item in antwort.get("Items", []):
+                # Merkposten des quellenuebergreifenden Abgleichs teilen
+                # sich die Tabelle mit den Anzeigen, sind aber keine.
+                if fingerabdruck.ist_merkposten(item.get("referenznummer")):
+                    continue
                 yield Eintrag.aus_item(item)
 
             # Scan liefert bei groesseren Tabellen nur eine Teilmenge und

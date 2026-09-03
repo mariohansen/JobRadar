@@ -82,4 +82,8 @@ module "lambda_poller" {
   schedule_expression        = var.poller_schedule_expression
   remote_bundesweit          = var.remote_bundesweit
   remote_min_prozent         = var.remote_min_prozent
+
+  quellen        = var.poller_quellen
+  adzuna_app_id  = var.adzuna_app_id
+  adzuna_app_key = var.adzuna_app_key
 }

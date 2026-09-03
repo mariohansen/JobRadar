@@ -124,6 +124,14 @@ resource "aws_lambda_function" "poller" {
       # remote zu erledigende Stellen mitnimmt.
       JOBSUCHE_REMOTE_BUNDESWEIT  = tostring(var.remote_bundesweit)
       JOBSUCHE_REMOTE_MIN_PROZENT = tostring(var.remote_min_prozent)
+
+      # Welche Boersen abgefragt werden. Der zweite bundesweite
+      # Durchgang oben gilt nur fuer die Bundesagentur; die uebrigen
+      # Quellen bringen ihre Remote-Stellen von sich aus mit.
+      POLLER_QUELLEN = var.quellen
+
+      ADZUNA_APP_ID  = var.adzuna_app_id
+      ADZUNA_APP_KEY = var.adzuna_app_key
     }
   }
 

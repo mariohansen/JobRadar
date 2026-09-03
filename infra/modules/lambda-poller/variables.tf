@@ -112,3 +112,27 @@ variable "remote_min_prozent" {
     error_message = "Der Anteil muss zwischen 1 und 100 liegen."
   }
 }
+
+variable "quellen" {
+  description = "Kommagetrennte Stellenboersen, die der Poller abfragt"
+  type        = string
+  default     = "arbeitsagentur,arbeitnow"
+}
+
+# Adzuna ist die einzige Quelle mit Zugangsdaten. Sie stehen als
+# Umgebungsvariable der Lambda, nicht in SSM: wer die Funktionskonfi-
+# guration lesen darf, ist in diesem Projekt derselbe, dem die
+# Registrierung gehoert. Leer bedeutet: Quelle bleibt still.
+variable "adzuna_app_id" {
+  description = "Adzuna app_id, leer laesst die Quelle aus"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "adzuna_app_key" {
+  description = "Adzuna app_key, leer laesst die Quelle aus"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

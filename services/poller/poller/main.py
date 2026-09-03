@@ -11,61 +11,67 @@ import logging
 import sys
 from typing import Any
 
+from gemeinsam import fingerabdruck
+
+from . import quellen
 from .config import ConfigError, KafkaConfig, SearchConfig
-from .jobsuche import (
-    JobsucheError,
-    ist_vollstaendig_remote,
-    referenznummer,
-    suche,
-)
+from .jobsuche import JobsucheError, referenznummer
 from .publisher import baue_producer, veroeffentliche
 
 log = logging.getLogger(__name__)
 
 
 def sammle_anzeigen(config: SearchConfig) -> list[dict[str, Any]]:
-    """Treffer aller Suchbegriffe aus zwei Durchgaengen, ohne Doppelte.
+    """Treffer aller eingestellten Quellen, ohne Doppelte.
 
-    Der erste Durchgang sucht im Umkreis des Wohnorts, unabhaengig davon,
-    ob Homeoffice angeboten wird. Der zweite sucht bundesweit und nimmt
-    nur Stellen mit, die vollstaendig remote zu erledigen sind - dort ist
-    die Entfernung gleichgueltig.
+    Doppelte entstehen auf drei Wegen: dieselbe Anzeige unter zwei
+    Suchbegriffen, eine Hamburger Stelle, die zugleich vollstaendig
+    remote ist, und - seit es mehrere Quellen gibt - dieselbe Stelle auf
+    zwei Portalen. Die ersten beiden faengt die Referenznummer ab, den
+    dritten der inhaltliche Fingerabdruck aus Arbeitgeber, Titel und Ort.
 
-    Doppelte innerhalb eines Laufs entstehen auf zwei Wegen: dieselbe
-    Anzeige unter zwei Suchbegriffen, oder eine Hamburger Stelle, die
-    zugleich vollstaendig remote ist. Beides faengt `gesehen` ab. Das
-    ersetzt keine Deduplizierung gegenueber frueheren Laeufen, dafuer ist
-    der filter-dedup-Consumer zustaendig.
+    Das ersetzt keine Deduplizierung gegenueber frueheren Laeufen; dafuer
+    ist der filter-dedup-Consumer zustaendig, der denselben Fingerabdruck
+    gegen DynamoDB prueft.
+
+    Faellt eine Quelle aus, laufen die uebrigen weiter. Eine Boerse ohne
+    Vertrag darf den ganzen Lauf nicht verhindern.
     """
     gesehen: set[str] = set()
+    inhalte: set[str] = set()
     anzeigen: list[dict[str, Any]] = []
 
     def aufnehmen(job: dict[str, Any]) -> bool:
         nummer = referenznummer(job)
         if nummer is None or nummer in gesehen:
             return False
+
+        # Ohne Arbeitgeber oder Titel gibt es keinen belastbaren
+        # Fingerabdruck. Dann zaehlt nur die Referenznummer.
+        abdruck = fingerabdruck.berechne(job)
+        if abdruck is not None and abdruck in inhalte:
+            return False
+
         gesehen.add(nummer)
+        if abdruck is not None:
+            inhalte.add(abdruck)
         anzeigen.append(job)
         return True
 
-    for begriff in config.suchbegriffe:
-        anzahl = sum(1 for job in suche(config, begriff) if aufnehmen(job))
-        log.info("%r im Umkreis von %s: %s Anzeigen", begriff, config.ort, anzahl)
+    for name in config.quellen:
+        if not quellen.ist_verfuegbar(name):
+            log.info("Quelle %s uebersprungen: keine Zugangsdaten", name)
+            continue
 
-    if not config.remote_bundesweit:
-        return anzeigen
+        vorher = len(anzeigen)
+        try:
+            for job in quellen.hole(name, config):
+                aufnehmen(job)
+        except Exception as exc:  # eine Boerse darf den Lauf nicht kippen
+            log.warning("Quelle %s uebersprungen: %s", name, exc)
+            continue
 
-    for begriff in config.suchbegriffe:
-        anzahl = sum(
-            1
-            for job in suche(config, begriff, ortsgebunden=False)
-            if ist_vollstaendig_remote(job, config.remote_min_prozent)
-            and aufnehmen(job)
-        )
-        log.info(
-            "%r bundesweit mit mindestens %s Prozent Homeoffice: %s Anzeigen",
-            begriff, config.remote_min_prozent, anzahl,
-        )
+        log.info("%s: %s neue Anzeigen", name, len(anzeigen) - vorher)
 
     return anzeigen
 

@@ -62,7 +62,7 @@ variable "budget_alert_email" {
 variable "suchbegriffe" {
   description = "Kommagetrennte Suchbegriffe fuer die Jobsuche"
   type        = string
-  default     = "Data Engineer,Softwareentwickler"
+  default     = "Data Engineer,Softwareentwickler,Software Engineer,Developer,Java"
 }
 
 variable "suchort" {
@@ -105,4 +105,24 @@ variable "remote_min_prozent" {
   description = "Mindestanteil Homeoffice fuer den bundesweiten Durchgang"
   type        = number
   default     = 100
+}
+
+variable "poller_quellen" {
+  description = "Kommagetrennte Stellenboersen (siehe services/poller/poller/quellen/)"
+  type        = string
+  default     = "arbeitsagentur,arbeitnow"
+}
+
+variable "adzuna_app_id" {
+  description = "Adzuna app_id aus der kostenlosen Registrierung, leer laesst die Quelle aus"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "adzuna_app_key" {
+  description = "Adzuna app_key, leer laesst die Quelle aus"
+  type        = string
+  default     = ""
+  sensitive   = true
 }

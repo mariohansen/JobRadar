@@ -1,1 +1,6 @@
 boto3>=1.35
+# Nur fuer den Export in die Bewerbungstabelle. Die uebrigen Befehle
+# laden das Paket nicht.
+openpyxl>=3.1
+# Nur fuer das Faehigkeitsprofil: liest die Textebene aus PDF-Unterlagen.
+pypdf>=6.0
