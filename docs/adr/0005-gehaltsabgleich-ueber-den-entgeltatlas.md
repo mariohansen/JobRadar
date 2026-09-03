@@ -1,7 +1,15 @@
 # ADR 0005: Gehaltsabgleich ueber den Entgeltatlas
 
 Datum: 2026-08-31
-Status: akzeptiert
+Status: akzeptiert; im Tracker-Export zurueckgenommen (ADR 0008)
+
+> **Nachtrag ([ADR 0008](0008-tabelle-nach-passung-sortiert.md)):** Die
+> Schaetzung wurde als Spalte des Exports wieder entfernt. Der Median ist
+> fuer alle Anzeigen einer Berufsklasse in einer Region derselbe und
+> stand deshalb in Dutzenden Zeilen wortgleich, teils widerspruechlich
+> ("Spezialist" ueber "Experte"). `salary-check` bleibt als eigenes
+> Werkzeug fuer die gezielte Einzelabfrage - die Entscheidungen unten
+> gelten dort unveraendert.
 
 ## Kontext
 
