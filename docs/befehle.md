@@ -63,8 +63,27 @@ terraform -chdir=..\..\infra output -raw dedup_table_name     # Invalid -chdir o
 terraform "-chdir=..\..\infra" output -raw dedup_table_name   # funktioniert
 ```
 
-`scripts/deploy-consumers.sh` braucht Bash — mit Git für Windows liegt es
-als `bash` im Pfad, der Aufruf funktioniert dann auch aus PowerShell.
+`scripts/deploy-consumers.sh` braucht Bash. **`bash scripts/…` reicht unter
+Windows nicht**: `C:\Windows\System32\bash.exe` gehört zum
+Windows-Subsystem für Linux und steht im Pfad vor Git für Windows. Ohne
+installierte WSL-Distribution endet der Aufruf mit
+
+```
+Windows-Subsystem für Linux verfügt über keine installierten Distributionen.
+```
+
+Deshalb die Git-Bash direkt aufrufen:
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" scripts/deploy-consumers.sh
+```
+
+Wo sie liegt, verrät `Get-Command bash -All`. Wer den Aufruf oft braucht,
+legt sich ein Kürzel ins Profil:
+
+```powershell
+function deploy { & "C:\Program Files\Git\bin\bash.exe" scripts/deploy-consumers.sh }
+```
 
 ---
 
@@ -115,7 +134,7 @@ mit `[Environment]::SetEnvironmentVariable("DYNAMODB_TABLE_SEEN_JOBS",
 | Lambda-Paket bauen | `python services/poller/build.py` |
 | Terraform vorbereiten | `terraform -chdir=infra init` |
 | Infrastruktur anlegen | `terraform -chdir=infra apply` |
-| Consumer ausrollen | `bash scripts/deploy-consumers.sh` |
+| Consumer ausrollen | `bash scripts/deploy-consumers.sh` (Windows: `& "C:\Program Files\Git\bin\bash.exe" scripts/deploy-consumers.sh`) |
 | Umgebung anlegen | `python -m venv .venv` |
 | Umgebung aktivieren | `.\.venv\Scripts\Activate.ps1` |
 | Abhängigkeiten lokal | `pip install -r services\tracker\requirements.txt` |
@@ -736,7 +755,7 @@ aws lambda invoke --function-name $(terraform -chdir=infra output -raw poller_fu
 aws logs tail $(terraform -chdir=infra output -raw poller_log_group) --since 10m --format short
 
 # nach einer Codeänderung
-bash scripts/deploy-consumers.sh                                   # Consumer
+& "C:\Program Files\Git\bin\bash.exe" scripts/deploy-consumers.sh  # Consumer
 python services/poller/build.py; if ($?) { terraform -chdir=infra apply }   # Poller
 
 # Instanz stoppen und starten

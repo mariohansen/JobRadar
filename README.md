@@ -272,6 +272,7 @@ python services/poller/build.py          # Lambda-Paket bauen
 terraform -chdir=infra init
 terraform -chdir=infra apply
 bash scripts/deploy-consumers.sh         # Consumer auf die Instanz
+# Windows: & "C:\Program Files\Git\bin\bash.exe" scripts/deploy-consumers.sh
 ```
 
 AWS schickt zwei Bestätigungsmails – eine für das Budget, eine für die
