@@ -23,7 +23,7 @@ Free-Tier-Konto. Alle Befehle, Schalter und Umgebungsvariablen stehen in
 | `tracker trend`: Skill-Trend über das Archiv | fertig |
 | `salary-check`: Abgleich mit dem Entgeltatlas | fertig |
 
-338 Tests über sechs Services, alle ohne Netzzugriff lauffähig.
+347 Tests über sechs Services, alle ohne Netzzugriff lauffähig.
 
 ## Architektur
 

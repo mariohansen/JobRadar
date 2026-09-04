@@ -28,6 +28,16 @@ ENTFERNUNGSFELDER = ("entfernung", "distanz", "entfernungKm")
 # steht als Rueckfallebene dahinter.
 BESCHREIBUNGSFELDER = ("stellenangebotsBeschreibung", "stellenbeschreibung")
 
+# Die Adresse der Anzeige beim Arbeitgeber oder Portal. Auch hier hat die
+# Schnittstelle die Schreibweise gewechselt.
+EXTERNE_URL_FELDER = ("externeURL", "externeUrl")
+
+# Nur bei dieser Quelle fuehrt die Referenznummer in eine Oberflaeche.
+# Muss zum Namen in poller/quellen/arbeitsagentur.py passen.
+QUELLE_ARBEITSAGENTUR = "arbeitsagentur"
+
+STELLENLINK = "https://www.arbeitsagentur.de/jobsuche/jobdetail/"
+
 
 def _text(wert: Any) -> str:
     return wert.strip() if isinstance(wert, str) else ""
@@ -52,6 +62,50 @@ def beschreibung(*quellen: dict[str, Any] | None) -> str:
             if wert:
                 return wert
     return ""
+
+
+def quelle(job: dict[str, Any] | None) -> str:
+    """Welches Portal die Anzeige gemeldet hat.
+
+    Eintraege aus der Zeit vor den zusaetzlichen Quellen tragen das Feld
+    noch nicht; sie stammen von der Bundesagentur.
+    """
+    wert = _text((job or {}).get("quelle"))
+    return wert or QUELLE_ARBEITSAGENTUR
+
+
+def externe_url(job: dict[str, Any] | None, detail: dict[str, Any] | None = None) -> str:
+    for feld in EXTERNE_URL_FELDER:
+        wert = _text((job or {}).get(feld)) or _text((detail or {}).get(feld))
+        if wert:
+            return wert
+    return ""
+
+
+def stellenlink(
+    job: dict[str, Any] | None,
+    detail: dict[str, Any] | None = None,
+    referenznummer: str = "",
+) -> str:
+    """Adresse, unter der die Anzeige zu lesen ist.
+
+    Bei der Bundesagentur fuehrt die Referenznummer in ihre eigene
+    Oberflaeche - und die zeigt den vollstaendigen Text, den die
+    Trefferliste nicht mitgibt. Deshalb bleibt es dort bei diesem Link,
+    auch wenn eine externe Adresse danebensteht.
+
+    Die uebrigen Portale haben bei der Bundesagentur nichts stehen. Fuer
+    sie ist die mitgelieferte Adresse der einzige Weg zur Anzeige; ein
+    Jobboerse-Link mit "arbeitnow:..." im Pfad laeuft ins Leere.
+    """
+    job = job or {}
+    if quelle(job) != QUELLE_ARBEITSAGENTUR:
+        extern = externe_url(job, detail)
+        if extern:
+            return extern
+
+    nummer = referenznummer or _text(job.get("referenznummer"))
+    return f"{STELLENLINK}{nummer}"
 
 
 def text(roh: dict[str, Any], detail: dict[str, Any] | None = None) -> str:

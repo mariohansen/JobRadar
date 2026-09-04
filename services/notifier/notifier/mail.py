@@ -15,6 +15,8 @@ from __future__ import annotations
 import html
 from typing import Any
 
+from gemeinsam import anzeige
+
 # Muss zu filter_dedup.anreicherung.SCHLUESSEL passen.
 ZUSATZ = "jobradar"
 
@@ -105,14 +107,14 @@ def _randdaten(job: dict[str, Any]) -> str:
 
 
 def _stellenlink(job: dict[str, Any]) -> str:
-    """Link in die Jobboerse.
+    """Link zur Anzeige - je nach Quelle woandershin.
 
-    Die Oberflaeche der Bundesagentur erwartet die Referenznummer im
-    Pfad; ueber diesen Weg ist die vollstaendige Anzeige samt Text
-    erreichbar, den die Trefferliste der API nicht mitliefert.
+    Die Logik steht in `gemeinsam.anzeige`, damit Mail und Tabelle
+    denselben Link bauen. Sie lief hier eine Zeit lang auseinander: die
+    Mail verwies auch fuer Arbeitnow und Jobicy auf die Jobboerse der
+    Bundesagentur, wo diese Anzeigen nie standen.
     """
-    referenz = job.get("referenznummer", "")
-    return f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{referenz}"
+    return anzeige.stellenlink(job)
 
 
 def als_text(anzeigen: list[dict[str, Any]]) -> str:

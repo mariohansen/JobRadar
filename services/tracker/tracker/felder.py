@@ -362,32 +362,23 @@ def kontakt_gesamt(detail: dict[str, Any], text: str | None = None) -> str:
 
 
 def externe_url(roh: dict[str, Any], detail: dict[str, Any]) -> str:
-    for feld in EXTERNE_URL_FELDER:
-        wert = _text(roh.get(feld)) or _text(detail.get(feld))
-        if wert:
-            return wert
-    return ""
+    return anzeige.externe_url(roh, detail)
 
 
 def quelle(roh: dict[str, Any]) -> str:
     """Welches Portal die Anzeige gemeldet hat."""
-    return _text(roh.get("quelle")) or QUELLE_ARBEITSAGENTUR
+    return anzeige.quelle(roh)
 
 
 def stellenlink(
     referenznummer: str, roh: dict[str, Any], detail: dict[str, Any]
 ) -> str:
-    """Adresse, unter der die Anzeige zu lesen ist.
+    """Adresse der Anzeige - Einzelheiten in `gemeinsam.anzeige`.
 
-    Bei der Bundesagentur fuehrt die Referenznummer in ihre eigene
-    Oberflaeche. Die uebrigen Portale haben dort nichts stehen - fuer sie
-    ist die mitgelieferte Adresse der einzige Weg zur Anzeige.
+    Die Referenznummer kommt hier aus DynamoDB und nicht aus den
+    Rohdaten: faellt das Archiv aus, ist sie das Einzige, was bleibt.
     """
-    if quelle(roh) != QUELLE_ARBEITSAGENTUR:
-        extern = externe_url(roh, detail)
-        if extern:
-            return extern
-    return f"{STELLENLINK}{referenznummer}"
+    return anzeige.stellenlink(roh, detail, referenznummer)
 
 
 def bewerbungsweg(

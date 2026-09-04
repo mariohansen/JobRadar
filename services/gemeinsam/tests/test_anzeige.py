@@ -43,3 +43,48 @@ def test_alter_tage_nimmt_die_erste_veroeffentlichung():
     roh = {"datumErsteVeroeffentlichung": "2026-08-24"}
 
     assert anzeige.alter_tage(roh, heute=heute) == 10
+
+
+# --- Stellenlink ------------------------------------------------------
+
+
+def test_bundesagentur_verlinkt_ihre_eigene_oberflaeche():
+    job = {"referenznummer": "10001-1-S"}
+
+    assert anzeige.stellenlink(job).endswith("/jobsuche/jobdetail/10001-1-S")
+
+
+def test_alte_eintraege_ohne_quelle_gelten_als_bundesagentur():
+    assert anzeige.quelle({"referenznummer": "10001-1-S"}) == "arbeitsagentur"
+
+
+def test_externes_portal_verdraengt_die_jobboerse_nicht():
+    """Die Seite der Bundesagentur zeigt den vollen Text - die bleibt."""
+    job = {
+        "referenznummer": "10001-1-S",
+        "quelle": "arbeitsagentur",
+        "externeURL": "https://firma.de/stelle",
+    }
+
+    assert "arbeitsagentur.de" in anzeige.stellenlink(job)
+
+
+def test_fremde_quelle_verlinkt_ihre_eigene_adresse():
+    """Eine Jobboerse-URL mit 'arbeitnow:...' im Pfad laeuft ins Leere."""
+    job = {
+        "referenznummer": "arbeitnow:fullstack-braunschweig-79481",
+        "quelle": "arbeitnow",
+        "externeURL": "https://www.arbeitnow.com/jobs/x",
+    }
+
+    link = anzeige.stellenlink(job)
+
+    assert link == "https://www.arbeitnow.com/jobs/x"
+    assert "arbeitsagentur.de" not in link
+
+
+def test_referenznummer_darf_von_aussen_kommen():
+    """Faellt das Archiv aus, ist sie das Einzige, was bleibt."""
+    link = anzeige.stellenlink({}, None, "10001-9-S")
+
+    assert link.endswith("10001-9-S")

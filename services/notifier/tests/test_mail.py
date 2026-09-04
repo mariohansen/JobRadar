@@ -121,3 +121,38 @@ def test_mail_ohne_anreicherung_bleibt_wie_bisher():
     assert "Data Engineer (m/w/d)" in text
     assert "Punkte" not in text
     assert "<" not in text
+
+
+# --- Links je Quelle --------------------------------------------------
+
+
+def _anzeige(referenz, quelle=None, url=None):
+    job = {"stellenangebotsTitel": "Fullstack Softwareentwickler", "referenznummer": referenz}
+    if quelle:
+        job["quelle"] = quelle
+    if url:
+        job["externeURL"] = url
+    return job
+
+
+def test_mail_verlinkt_fremde_quellen_auf_ihr_eigenes_portal():
+    """Der Fehler, der es in echte Mails geschafft hat: die Jobboerse
+    bekam Links wie /jobdetail/arbeitnow:fullstack-... und lief ins Leere."""
+    job = _anzeige(
+        "arbeitnow:fullstack-softwareentwickler-braunschweig-79481",
+        quelle="arbeitnow",
+        url="https://www.arbeitnow.com/jobs/companies/x/fullstack",
+    )
+
+    text = mail.als_text([job])
+    html = mail.als_html([job])
+
+    assert "https://www.arbeitnow.com/jobs/companies/x/fullstack" in text
+    assert "jobdetail/arbeitnow:" not in text
+    assert "jobdetail/arbeitnow:" not in html
+
+
+def test_mail_verlinkt_die_bundesagentur_weiterhin_ueber_die_referenz():
+    job = _anzeige("10001-1003552327-S")
+
+    assert "arbeitsagentur.de/jobsuche/jobdetail/10001-1003552327-S" in mail.als_text([job])
