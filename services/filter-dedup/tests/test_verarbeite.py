@@ -41,13 +41,14 @@ class FakeProducer:
         self.gesendet.append(key.decode("utf-8"))
 
 
-def konfiguration(ausschluss=(), pflicht=()):
+def konfiguration(ausschluss=(), pflicht=(), arbeitgeber=()):
     return FilterConfig(
         tabelle="t",
         bucket="b",
         profil_pfad="",
         mit_details=False,
         ausschluss=ausschluss,
+        arbeitgeber=arbeitgeber,
         pflicht=pflicht,
         aufbewahrung_tage=180,
     )
@@ -62,7 +63,7 @@ def stelle(referenz, firma="Beispiel GmbH", titel="Data Engineer (m/w/d)"):
     }
 
 
-def lauf(jobs, ausschluss=()):
+def lauf(jobs, ausschluss=(), arbeitgeber=()):
     archiv, dedup, producer = FakeArchiv(), FakeDedup(), FakeProducer()
     ergebnisse = [
         verarbeite(
@@ -70,7 +71,7 @@ def lauf(jobs, ausschluss=()):
             job["referenznummer"],
             archiv,
             dedup,
-            konfiguration(ausschluss),
+            konfiguration(ausschluss, arbeitgeber=arbeitgeber),
             producer,
             "jobs.matched",
         )
@@ -141,3 +142,32 @@ def test_anzeige_ohne_firma_laeuft_ueber_die_kennung_weiter():
 
     assert ergebnisse == ["weitergereicht", "bekannt"]
     assert producer.gesendet == ["10001-9-S"]
+
+
+def test_arbeitgeber_auf_der_liste_wird_aussortiert():
+    """Der Firmenname, nicht der Titel - die Anzeige selbst waere passend."""
+    job = stelle("10001-1-S", firma="NTT DATA Deutschland SE",
+                 titel="Data Engineer (m/w/d)")
+
+    ergebnisse, _, producer = lauf([job], arbeitgeber=("ntt data",))
+
+    assert ergebnisse == ["aussortiert"]
+    assert producer.gesendet == []
+
+
+def test_ein_eintrag_deckt_alle_firmierungen_ab():
+    jobs = [
+        stelle("1-S", firma="NTT DATA Deutschland SE"),
+        stelle("2-S", firma="NTT DATA Business Solutions Global Managed Services GmbH"),
+    ]
+
+    ergebnisse, _, _ = lauf(jobs, arbeitgeber=("ntt data",))
+
+    assert ergebnisse == ["aussortiert", "aussortiert"]
+
+
+def test_andere_arbeitgeber_kommen_durch():
+    ergebnisse, _, _ = lauf([stelle("1-S", firma="Beispiel GmbH")],
+                            arbeitgeber=("ntt data",))
+
+    assert ergebnisse == ["weitergereicht"]

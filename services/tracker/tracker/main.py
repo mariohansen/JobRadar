@@ -123,6 +123,40 @@ def _uebernimm_status(store: Store, eintraege: list, datei: str, blattname: str 
     return aktualisiert, geaendert, sorted(set(unbekannt))
 
 
+def _teile_arbeitgeber(zeilen, eintraege, mit_aussortierten: bool):
+    """Trennt Zeilen ab, deren Arbeitgeber auf der Ausschlussliste steht.
+
+    Anders als der Titel steht der Firmenname nicht im Tabelleneintrag,
+    sondern erst in den Rohdaten aus dem Archiv - also erst, nachdem die
+    Zeilen gebaut sind. Deshalb hier und nicht in `_teile_aussortierte`.
+    """
+    from gemeinsam import ausschluss
+
+    if mit_aussortierten:
+        return zeilen, eintraege, {}
+
+    liste = ausschluss.arbeitgeber_aus_umgebung(
+        os.environ.get("MATCH_ARBEITGEBER_AUSSCHLUSS")
+    )
+    behalten_zeilen = []
+    behalten_eintraege = []
+    aussortiert: dict[str, list[str]] = {}
+
+    for zeile, eintrag in zip(zeilen, eintraege):
+        grund = (
+            ausschluss.arbeitgeber_grund(zeile.get("Firma"), liste)
+            if eintrag.status == st.GEFUNDEN
+            else None
+        )
+        if grund:
+            aussortiert.setdefault(grund, []).append(eintrag.referenznummer)
+        else:
+            behalten_zeilen.append(zeile)
+            behalten_eintraege.append(eintrag)
+
+    return behalten_zeilen, behalten_eintraege, aussortiert
+
+
 def _melde_aussortierte(aussortiert: dict[str, list[str]]) -> None:
     if not aussortiert:
         return
@@ -383,6 +417,15 @@ def befehl_export(store: Store, args: argparse.Namespace) -> int:
 
     zeilen = ex.baue_zeilen(eintraege, quellen, fortschritt, eigenes_profil)
     print()
+
+    # Der Arbeitgeber steht erst jetzt fest - er kommt aus dem Archiv,
+    # nicht aus dem Tabelleneintrag.
+    zeilen, eintraege, wegen_firma = _teile_arbeitgeber(
+        zeilen, eintraege, args.mit_aussortierten
+    )
+    for grund, refs in wegen_firma.items():
+        aussortiert.setdefault(grund, []).extend(refs)
+        aussortierte_referenzen.update(refs)
 
     spalten = felder.SPALTEN_MIT_PASSUNG if eigenes_profil else felder.SPALTEN_STANDARD
     bericht = excel.schreibe(

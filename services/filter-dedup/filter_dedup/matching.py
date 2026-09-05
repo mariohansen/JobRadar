@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gemeinsam.ausschluss import enthaelt, grund
+from gemeinsam.ausschluss import arbeitgeber_grund, enthaelt, grund
 
 
 def durchsuchbarer_text(job: dict[str, Any]) -> str:
@@ -27,8 +27,14 @@ def durchsuchbarer_text(job: dict[str, Any]) -> str:
 
 
 def passt(
-    job: dict[str, Any], ausschluss: tuple[str, ...], pflicht: tuple[str, ...]
+    job: dict[str, Any],
+    ausschluss: tuple[str, ...],
+    pflicht: tuple[str, ...],
+    arbeitgeber: tuple[str, ...] = (),
 ) -> bool:
+    if arbeitgeber_grund(job.get("firma"), arbeitgeber):
+        return False
+
     text = durchsuchbarer_text(job)
 
     if grund(text, ausschluss):

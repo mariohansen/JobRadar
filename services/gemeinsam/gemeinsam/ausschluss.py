@@ -17,6 +17,7 @@ Wortende bleibt offen, damit "praktikum" auch "Praktikumsstelle" trifft.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # Drei Gruppen:
 #
@@ -47,6 +48,25 @@ STANDARD: tuple[str, ...] = (
     "principal",
     "staff",
     "head of",
+    # Fachrichtungen, die nichts mit dem angepeilten Profil zu tun haben.
+    # Sie kommen ueber die breiten Suchbegriffe herein: eine Suche nach
+    # "Developer" oder "Java" liefert auch Embedded- und SAP-Rollen.
+    "c++",
+    "embedded",
+    "sap",
+)
+
+# Arbeitgeber, von denen nichts kommen soll - eine persoenliche Liste,
+# kein fachliches Kriterium. Sie steht getrennt, weil sie ein anderes
+# Feld prueft: den Firmennamen, nicht den Titel.
+#
+# Ein Eintrag deckt alle Firmierungen ab, die so beginnen. "ntt data"
+# trifft damit sowohl die "NTT DATA Deutschland SE" als auch die
+# "NTT DATA Business Solutions Global Managed Services GmbH".
+#
+# Ueber MATCH_ARBEITGEBER_AUSSCHLUSS zu aendern.
+ARBEITGEBER: tuple[str, ...] = (
+    "ntt data",
 )
 
 
@@ -63,11 +83,35 @@ def grund(text: str, begriffe: tuple[str, ...] = STANDARD) -> str | None:
     return next((begriff for begriff in begriffe if enthaelt(gesenkt, begriff)), None)
 
 
+def arbeitgeber_grund(
+    firma: Any, begriffe: tuple[str, ...] = ARBEITGEBER
+) -> str | None:
+    """Der Ausschlussgrund zu einem Firmennamen, sonst None.
+
+    Getrennt von `grund`, weil hier der Arbeitgeber geprueft wird und
+    nicht der Titel. Ein Titelfilter faenge "NTT DATA" heute zwar auch,
+    weil eine Quelle den Firmennamen in den Titel schreibt - aber das
+    ist deren Formatierung und keine Zusage.
+    """
+    if not isinstance(firma, str) or not firma.strip():
+        return None
+    gesenkt = firma.casefold()
+    return next((begriff for begriff in begriffe if enthaelt(gesenkt, begriff)), None)
+
+
+def _liste(roh: str | None) -> tuple[str, ...]:
+    return tuple(teil.strip().lower() for teil in (roh or "").split(",") if teil.strip())
+
+
 def aus_umgebung(roh: str | None) -> tuple[str, ...]:
-    """Die Liste aus MATCH_AUSSCHLUSS, oder die Vorgabe.
+    """Die Titelbegriffe aus MATCH_AUSSCHLUSS, oder die Vorgabe.
 
     Leer oder nicht gesetzt bedeutet: die Standardliste. Damit lesen
     `filter-dedup` und `tracker` dieselbe Einstellung.
     """
-    stuecke = tuple(teil.strip().lower() for teil in (roh or "").split(",") if teil.strip())
-    return stuecke or STANDARD
+    return _liste(roh) or STANDARD
+
+
+def arbeitgeber_aus_umgebung(roh: str | None) -> tuple[str, ...]:
+    """Die Arbeitgeber aus MATCH_ARBEITGEBER_AUSSCHLUSS, oder die Vorgabe."""
+    return _liste(roh) or ARBEITGEBER

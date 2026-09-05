@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from gemeinsam.ausschluss import ARBEITGEBER as STANDARD_ARBEITGEBER
 from gemeinsam.ausschluss import STANDARD as STANDARD_AUSSCHLUSS
 
 
@@ -73,6 +74,7 @@ class FilterConfig:
     profil_pfad: str
     mit_details: bool
     ausschluss: tuple[str, ...]
+    arbeitgeber: tuple[str, ...]
     pflicht: tuple[str, ...]
     aufbewahrung_tage: int
 
@@ -87,6 +89,9 @@ class FilterConfig:
             # gemeinsam.ausschluss, damit der tracker dieselbe anwendet.
             # Leer oder nicht gesetzt bedeutet: die Vorgabe von dort.
             ausschluss=_liste("MATCH_AUSSCHLUSS") or STANDARD_AUSSCHLUSS,
+            # Arbeitgeber statt Fachrichtung - geprueft wird der
+            # Firmenname, nicht der Titel.
+            arbeitgeber=_liste("MATCH_ARBEITGEBER_AUSSCHLUSS") or STANDARD_ARBEITGEBER,
             # Leer bedeutet: keine Einschraenkung. Sonst muss mindestens
             # einer dieser Begriffe vorkommen.
             pflicht=_liste("MATCH_PFLICHT"),

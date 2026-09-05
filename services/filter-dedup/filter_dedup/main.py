@@ -96,7 +96,12 @@ def verarbeite(
     if schluessel is not None and not dedup.ist_inhaltlich_neu(schluessel, referenznummer):
         return "doppelt"
 
-    if not passt(job, filter_config.ausschluss, filter_config.pflicht):
+    if not passt(
+        job,
+        filter_config.ausschluss,
+        filter_config.pflicht,
+        filter_config.arbeitgeber,
+    ):
         return "aussortiert"
 
     # Erst hier, nach Dedup und Filter: nur was wirklich neu ist und

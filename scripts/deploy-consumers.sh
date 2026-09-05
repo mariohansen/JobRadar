@@ -55,6 +55,11 @@ fi
 # Konfiguration. Enthaelt keine Geheimnisse - nur die Namen der
 # SSM-Parameter, aus denen die Dienste Passwort und Zertifikat holen.
 echo "Schreibe Konfiguration..."
+# Die beiden MATCH_-Variablen bleiben leer. Ein leerer Wert heisst:
+# nimm die Liste aus gemeinsam/ausschluss.py. Sie hier noch einmal
+# auszuschreiben hiesse, dieselbe Liste an zwei Stellen zu pflegen - und
+# genau das ist schon passiert: die Begriffe im Skript hingen dem Code
+# hinterher, und der Consumer filterte nach der alten Fassung.
 $SSH "cat > /opt/jobradar/env" <<ENV
 KAFKA_BOOTSTRAP_SERVERS=$BOOTSTRAP
 KAFKA_SASL_USERNAME=$BENUTZER
@@ -63,7 +68,8 @@ KAFKA_CA_CERT_PATH=/opt/jobradar/ca.crt
 KAFKA_TOPIC_RAW=jobs.raw
 KAFKA_TOPIC_MATCHED=jobs.matched
 DYNAMODB_TABLE_SEEN_JOBS=$TABELLE
-MATCH_AUSSCHLUSS=praktikum,werkstudent,ausbildung,minijob,aushilfe,schulpraktikum,senior,sr,lead,teamlead,leiter,teamleiter,principal,staff,head of
+MATCH_AUSSCHLUSS=
+MATCH_ARBEITGEBER_AUSSCHLUSS=
 S3_BUCKET_RAW_ARCHIVE=$BUCKET
 JOBRADAR_PROFIL=$PROFIL_ENTFERNT
 SES_SENDER_ADDRESS=$MAIL

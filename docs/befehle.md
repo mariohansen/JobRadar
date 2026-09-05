@@ -716,7 +716,8 @@ muss gesetzt sein.
 
 | Variable | Vorgabe | Bedeutung |
 |----------|---------|-----------|
-| `MATCH_AUSSCHLUSS` | siehe unten | Begriffe, die aussortieren |
+| `MATCH_AUSSCHLUSS` | siehe unten | Titelbegriffe, die aussortieren |
+| `MATCH_ARBEITGEBER_AUSSCHLUSS` | `ntt data` | Firmennamen, die aussortieren |
 | `MATCH_PFLICHT` | leer | mindestens einer muss vorkommen. Leer = keine Einschränkung |
 | `DEDUP_AUFBEWAHRUNG_TAGE` | `180` | Frist für Anzeigen im Status `GEFUNDEN` |
 | `JOBRADAR_PROFIL` | leer | Profil für die Bewertung. Leer = keine Bewertung |
@@ -726,8 +727,14 @@ Voreingestellter Ausschluss:
 
 ```
 praktikum, werkstudent, ausbildung, minijob, aushilfe, schulpraktikum,
-senior, sr, lead, teamlead, leiter, teamleiter, principal, staff, head of
+senior, sr, lead, teamlead, leiter, teamleiter, principal, staff,
+head of, c++, embedded, sap
 ```
+
+Voreingestellte Arbeitgeber: `ntt data`. Diese Liste prüft den
+**Firmennamen** statt des Titels — ein Eintrag deckt alle Firmierungen
+ab, die so beginnen (`NTT DATA Deutschland SE` und `NTT DATA Business
+Solutions Global Managed Services GmbH` mit einem Eintrag).
 
 Verglichen wird auf den **Wortanfang**: `sr` trifft „Sr." aber nicht
 „I**sr**ael"; `praktikum` erfasst weiterhin „Praktikumsstelle". Deshalb

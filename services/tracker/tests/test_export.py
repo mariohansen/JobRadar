@@ -343,3 +343,34 @@ def test_ohne_tabelle_passiert_nichts(monkeypatch):
     )
 
     assert (aktualisiert, geaendert, unbekannt) == (eintraege, 0, [])
+
+
+def test_arbeitgeber_ausschluss_greift_erst_nach_dem_zeilenbau(monkeypatch):
+    """Der Firmenname steht nicht im Tabelleneintrag, sondern im Archiv."""
+    from tracker import main as m
+
+    monkeypatch.delenv("MATCH_ARBEITGEBER_AUSSCHLUSS", raising=False)
+    eintraege = [_eintrag("1-S", "Data Engineer"), _eintrag("2-S", "Data Engineer")]
+    zeilen = [{"Firma": "NTT DATA Deutschland SE"}, {"Firma": "Beispiel GmbH"}]
+
+    behalten, uebrig, aussortiert = m._teile_arbeitgeber(
+        zeilen, eintraege, mit_aussortierten=False
+    )
+
+    assert [z["Firma"] for z in behalten] == ["Beispiel GmbH"]
+    assert [e.referenznummer for e in uebrig] == ["2-S"]
+    assert aussortiert == {"ntt data": ["1-S"]}
+
+
+def test_arbeitgeber_ausschluss_verschont_laufende_bewerbungen(monkeypatch):
+    from tracker import main as m
+
+    monkeypatch.delenv("MATCH_ARBEITGEBER_AUSSCHLUSS", raising=False)
+    eintraege = [_eintrag("1-S", "Data Engineer", status="BEWORBEN")]
+
+    behalten, _, aussortiert = m._teile_arbeitgeber(
+        [{"Firma": "NTT DATA Deutschland SE"}], eintraege, mit_aussortierten=False
+    )
+
+    assert len(behalten) == 1
+    assert aussortiert == {}

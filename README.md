@@ -23,7 +23,7 @@ Free-Tier-Konto. Alle Befehle, Schalter und Umgebungsvariablen stehen in
 | `tracker trend`: Skill-Trend über das Archiv | fertig |
 | `salary-check`: Abgleich mit dem Entgeltatlas | fertig |
 
-347 Tests über sechs Services, alle ohne Netzzugriff lauffähig.
+352 Tests über sechs Services, alle ohne Netzzugriff lauffähig.
 
 ## Architektur
 
@@ -140,6 +140,13 @@ Anschließend fliegt heraus, wessen Titel einen Ausschlussbegriff enthält:
 | Einstiegsstellen | `praktikum`, `werkstudent`, `ausbildung`, `minijob`, `aushilfe` |
 | Erfahrungsstufe | `senior`, `sr` |
 | Führungsrollen | `lead`, `teamlead`, `leiter`, `teamleiter`, `principal`, `staff`, `head of` |
+| Fachrichtung | `c++`, `embedded`, `sap` |
+
+Die letzte Gruppe kommt über die breiten Suchbegriffe herein: eine Suche
+nach `Developer` oder `Java` liefert auch Embedded- und SAP-Rollen. Dazu
+eine **zweite Liste für Arbeitgeber** (`MATCH_ARBEITGEBER_AUSSCHLUSS`),
+die den Firmennamen statt des Titels prüft — ein Eintrag deckt alle
+Firmierungen ab, die so beginnen.
 
 Verglichen wird auf den **Wortanfang**. Das ist der Unterschied zwischen
 `sr` als Abkürzung für Senior und dem `sr` in „I**sr**ael" — und es sorgt
@@ -149,10 +156,12 @@ der Liste: in „Teamlead" beginnt kein Wort mit `lead`. Bewusst nicht
 dabei ist `manager` — der Begriff steht auch in „Junior Customer Success
 Manager".
 
-Die Liste liegt in
+Beide Listen liegen in
 [`gemeinsam/ausschluss.py`](services/gemeinsam/gemeinsam/ausschluss.py)
-und gilt für **beide** Seiten: was die Mail verschweigt, kommt auch nicht
-in die Tabelle.
+und gelten für **beide** Seiten: was die Mail verschweigt, kommt auch
+nicht in die Tabelle. Das Ausrollskript setzt die Variablen bewusst leer
+— ein leerer Wert heißt „nimm die Liste aus dem Code", damit sie nicht an
+zwei Stellen gepflegt werden muss.
 
 ## Was bei einem Durchlauf passiert
 
